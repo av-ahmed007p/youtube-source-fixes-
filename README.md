@@ -472,18 +472,32 @@ Additionally, the outer **retry loop** (`MAX_RESUME_ATTEMPTS = 5`) in `process()
 
 **Affected file:** [`YoutubeAudioTrack.java`](common/src/main/java/dev/lavalink/youtube/track/YoutubeAudioTrack.java)
 
+### 6. Original Audio Track Enforcement & Anti-Auto-Dubbing Fix
+
+**Problem:** YouTube frequently serves auto-dubbed or translated audio tracks (e.g. auto-generated dubs in various languages) instead of the video's original soundtrack for multi-language videos (such as MrBeast, tutorials, international music, etc.).
+
+**Fix:** `StreamingNonMusicClient` implements comprehensive multi-language audio track detection:
+- Inspects `xtags` (`acont=original`), audio track IDs, and display names across 14+ languages (including English, Arabic `أصلي`, French, German, Russian, Korean, Japanese, Chinese, Turkish, Italian) to identify and lock onto the **original** audio track ID.
+- Automatically flags dubbed, auto-generated, translated, or descriptive tracks (`isDubbedDisplayName`) with `isDefaultAudioTrack = false`.
+- `TrackFormats.getBestFormat()` strictly filters out all dubbed tracks and selects only the authentic original audio stream, completely preventing unwanted dubbed audio from playing.
+
+**Affected files:**
+- [`StreamingNonMusicClient.java`](common/src/main/java/dev/lavalink/youtube/clients/skeleton/StreamingNonMusicClient.java)
+- [`TrackFormats.java`](common/src/main/java/dev/lavalink/youtube/track/format/TrackFormats.java)
+
 ---
 
-
+### Summary of Changed Files
 
 | File | Change |
 |------|--------|
 | `YoutubeAudioTrack.java` | Seamless position-aware resumption + 3-tier URL refresh + retry loop (fixes `AllClientsFailedException`) |
 | `YoutubePersistentHttpStream.java` | Self-healing URL refresh on 403/401 mid-stream errors |
-| `TrackFormats.java` | Prefers direct progressive streams over SABR |
-| `StreamingNonMusicClient.java` | Disables SABR by default |
+| `TrackFormats.java` | Prefers direct progressive streams over SABR + enforces original audio track filtering |
+| `StreamingNonMusicClient.java` | Disables SABR by default + multi-language anti-dubbing original track enforcement |
 | `Tv.java` | Disables SABR for the TV client |
 | `SabrStream.java` | Fixes premature finish and incorrect duration reporting |
+| `ClientHealthManager.java` | Circuit breaker tracking for client failure isolation |
 
 ---
 
