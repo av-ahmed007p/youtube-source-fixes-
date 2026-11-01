@@ -22,10 +22,10 @@ Which clients are used is entirely configurable.
   - Information on using a remote cipher server with `youtube-source`.
 - [REST Routes (`plugin` only)](#rest-routes-plugin-only)
   - Information on the REST routes provided by the `youtube-source` plugin module.
+- [Stability Improvements & Fixes](#stability-improvements--fixes)
+  - Seamless resumption, self-healing streams, SABR fixes, and anti-dubbing enforcement.
 - [Migration Information](#migration-from-lavaplayers-built-in-youtube-source)
   - Information on migrating from Lavaplayer's built-in Youtube source manager.
-- [Stability Improvements & Fixes](#stability-improvements--fixes)
-  - Internal fixes for seamless resumption, self-healing streams, and SABR issues.
 - [Additional Support](#additional-support)
   - For everything else.
 
@@ -456,7 +456,7 @@ This section documents internal stability enhancements and bug fixes applied to 
 
 ### 5. Smart Multi-Client Fallback & "All Clients Failed" Fix
 
-**Problem:** When a stream URL expired or a CDN returned a permanent 403 error mid-playback, the player threw an `AllClientsFailedException` (فشل جميع المشغلات), stopping the track entirely — even though other healthy clients were available.
+**Problem:** When a stream URL expired or a CDN returned a permanent 403 error mid-playback, the player threw an `AllClientsFailedException` (falsely reporting that all registered clients failed), stopping the track entirely — even though other healthy clients were available.
 
 **Fix:** A three-tier **URL Refresh** strategy (`UrlRefresher`) was added inside `YoutubeAudioTrack`, applied automatically whenever a chunk read fails:
 
@@ -472,14 +472,16 @@ Additionally, the outer **retry loop** (`MAX_RESUME_ATTEMPTS = 5`) in `process()
 
 **Affected file:** [`YoutubeAudioTrack.java`](common/src/main/java/dev/lavalink/youtube/track/YoutubeAudioTrack.java)
 
+---
+
 ### 6. Original Audio Track Enforcement & Anti-Auto-Dubbing Fix
 
-**Problem:** YouTube frequently serves auto-dubbed or translated audio tracks (e.g. auto-generated dubs in various languages) instead of the video's original soundtrack for multi-language videos (such as MrBeast, tutorials, international music, etc.).
+**Problem:** YouTube frequently serves auto-dubbed or translated audio tracks (e.g. auto-generated voiceovers in different languages based on server IP or user locale) instead of the creator's authentic original soundtrack for multi-language videos (such as MrBeast, multilingual music, and instructional videos).
 
-**Fix:** `StreamingNonMusicClient` implements comprehensive multi-language audio track detection:
-- Inspects `xtags` (`acont=original`), audio track IDs, and display names across 14+ languages (including English, Arabic `أصلي`, French, German, Russian, Korean, Japanese, Chinese, Turkish, Italian) to identify and lock onto the **original** audio track ID.
+**Fix:** `StreamingNonMusicClient` implements robust multi-language audio track detection to enforce the original soundtrack:
+- Inspects YouTube metadata including `xtags` (`acont=original`), audio track IDs, and localized display names across 14+ languages (English, Arabic, French, German, Russian, Korean, Japanese, Chinese, Turkish, Italian, and others) to pinpoint and lock onto the **original** audio track ID.
 - Automatically flags dubbed, auto-generated, translated, or descriptive tracks (`isDubbedDisplayName`) with `isDefaultAudioTrack = false`.
-- `TrackFormats.getBestFormat()` strictly filters out all dubbed tracks and selects only the authentic original audio stream, completely preventing unwanted dubbed audio from playing.
+- `TrackFormats.getBestFormat()` strictly filters out all dubbed tracks and selects only the authentic original audio stream, completely preventing unwanted voice dubbing.
 
 **Affected files:**
 - [`StreamingNonMusicClient.java`](common/src/main/java/dev/lavalink/youtube/clients/skeleton/StreamingNonMusicClient.java)
