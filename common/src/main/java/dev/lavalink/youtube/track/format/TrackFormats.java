@@ -114,6 +114,11 @@ public class TrackFormats {
         } else if (MIME_AUDIO_WEBM.equals(info.mimeType) && format.getAudioChannels() > 2) {
             // Opus with more than 2 audio channels is unsupported by LavaPlayer currently.
             return false;
+        } else if (!format.isSabr() && other.isSabr()) {
+            // Prefer direct progressive streams over SABR! Direct streams are stable and self-healing.
+            return true;
+        } else if (format.isSabr() && !other.isSabr()) {
+            return false;
         } else if (info.ordinal() != other.getInfo().ordinal()) {
             return info.ordinal() < other.getInfo().ordinal();
         } else if (format.isDrc() && !other.isDrc()) {

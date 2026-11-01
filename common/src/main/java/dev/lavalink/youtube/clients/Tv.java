@@ -83,10 +83,7 @@ public class Tv extends StreamingNonMusicClient {
 
     @Override
     protected boolean preferSabrPlayback() {
-        if (oauthPlayback && requestLivingRoomPoTokenId == null) {
-            return false;
-        }
-        return poToken != null;
+        return false;
     }
 
     private static void fetchLivingRoomPoTokenId(@NotNull HttpInterface httpInterface) {

@@ -198,11 +198,13 @@ public class SabrStream extends SeekableInputStream {
         boolean redirected = executeRequestWithRetry();
 
         if (!redirected && buffer.length() == bytesBefore && downloadedDurationMs == durationBefore) {
-            // No progress was made and we weren't redirected; assume the stream has ended.
-            finished = true;
+            // Only mark finished if we have actually reached the expected duration
+            if (durationMs > 0 && downloadedDurationMs >= durationMs) {
+                finished = true;
+            }
         }
 
-        if (downloadedDurationMs >= durationMs) {
+        if (durationMs > 0 && downloadedDurationMs >= durationMs) {
             finished = true;
         }
     }
@@ -341,7 +343,7 @@ public class SabrStream extends SeekableInputStream {
         formatInitialized = true;
 
         long computed = metadata.durationMs();
-        if (computed > 0) {
+        if (computed > durationMs) {
             durationMs = computed;
         }
 
@@ -546,7 +548,8 @@ public class SabrStream extends SeekableInputStream {
 
         // client_abr_state (field 1)
         ProtoWriter abrState = new ProtoWriter();
-        abrState.writeVarint(28, Math.max(0, downloadedDurationMs)); // player_time_ms
+        long playerTimeMs = buffer.length() > 0 ? (readPos * downloadedDurationMs / buffer.length()) : 0;
+        abrState.writeVarint(28, Math.max(0, playerTimeMs)); // player_time_ms
         abrState.writeFloat(35, 1.0f); // playback_rate
         abrState.writeVarint(34, 1); // visibility
         abrState.writeVarint(40, ENABLED_TRACK_TYPES_AUDIO_ONLY); // enabled_track_types_bitfield

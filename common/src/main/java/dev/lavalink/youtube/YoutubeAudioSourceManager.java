@@ -76,6 +76,7 @@ public class YoutubeAudioSourceManager implements AudioSourceManager {
     protected final boolean allowDirectVideoIds;
     protected final boolean allowDirectPlaylistIds;
     protected final Client[] clients;
+    protected final ClientHealthManager clientHealthManager;
 
     protected YoutubeOauth2Handler oauth2Handler;
     protected YoutubeHttpContextFilter contextFilter;
@@ -149,6 +150,7 @@ public class YoutubeAudioSourceManager implements AudioSourceManager {
         this.allowDirectPlaylistIds = options.isAllowDirectPlaylistIds();
         this.clients = clients;
         this.oauth2Handler = new YoutubeOauth2Handler(httpInterfaceManager);
+        this.clientHealthManager = new ClientHealthManager(clients, oauth2Handler);
 
         contextFilter = new YoutubeHttpContextFilter();
         contextFilter.setTokenTracker(new YoutubeAccessTokenTracker(httpInterfaceManager));
@@ -252,11 +254,9 @@ public class YoutubeAudioSourceManager implements AudioSourceManager {
                 return AudioReference.NO_TRACK;
             }
 
-            for (Client client : clients) {
-                if (!client.canHandleRequest(reference.identifier)) {
-                    continue;
-                }
+            List<Client> orderedClients = clientHealthManager.getOrderedClients(reference.identifier);
 
+            for (Client client : orderedClients) {
                 boolean shouldLogOauthWarning = client.supportsOAuth() && !loggedOauthClientNoAccountWarning &&
                     !oauth2Handler.hasAccessToken() && remotePoToken == null && client.getOptions().getPlayback();
 
@@ -271,13 +271,16 @@ public class YoutubeAudioSourceManager implements AudioSourceManager {
                 try {
                     item = router.route(client);
                 } catch (CannotBeLoaded cbl) {
+                    clientHealthManager.onFailure(client, cbl);
                     throw ExceptionTools.wrapUnfriendlyExceptions("This video cannot be loaded.", Severity.SUSPICIOUS, cbl.getCause());
                 } catch (Throwable t) {
+                    clientHealthManager.onFailure(client, t);
                     log.debug("Client \"{}\" threw a non-fatal exception, storing and proceeding...", client.getIdentifier(), t);
                     exceptions.add(new ClientException(t.getMessage(), client, t));
                 }
 
                 if (item != null) {
+                    clientHealthManager.onSuccess(client);
                     break;
                 }
             }
@@ -455,6 +458,11 @@ public class YoutubeAudioSourceManager implements AudioSourceManager {
     @NotNull
     public Client[] getClients() {
         return clients;
+    }
+
+    @NotNull
+    public ClientHealthManager getClientHealthManager() {
+        return clientHealthManager;
     }
 
     @NotNull

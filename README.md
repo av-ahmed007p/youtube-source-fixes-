@@ -24,6 +24,8 @@ Which clients are used is entirely configurable.
   - Information on the REST routes provided by the `youtube-source` plugin module.
 - [Migration Information](#migration-from-lavaplayers-built-in-youtube-source)
   - Information on migrating from Lavaplayer's built-in Youtube source manager.
+- [Stability Improvements & Fixes](#stability-improvements--fixes)
+  - Internal fixes for seamless resumption, self-healing streams, and SABR issues.
 - [Additional Support](#additional-support)
   - For everything else.
 
@@ -397,6 +399,93 @@ Example response:
 ```
 
 
+
+---
+
+## Stability Improvements & Fixes
+
+This section documents internal stability enhancements and bug fixes applied to `youtube-source` to improve playback resilience, especially in long-running or high-traffic Lavalink deployments.
+
+### 1. Seamless Mid-Stream Resumption
+
+**Problem:** When YouTube returned a transient decoding error mid-playback (e.g. `Something went wrong when decoding the track` at ~50 seconds), the track would restart from the beginning instead of resuming from where it stopped.
+
+**Fix:** `YoutubeAudioTrack` now captures the current playback position (`localExecutor.getPosition()`) before any retry attempt. On resumption, `localExecutor.setPosition(...)` is called with the saved offset, allowing playback to continue seamlessly from where it was interrupted — with no audible gap or restart.
+
+**Affected file:** [`YoutubeAudioTrack.java`](common/src/main/java/dev/lavalink/youtube/track/YoutubeAudioTrack.java)
+
+---
+
+### 2. Self-Healing Persistent HTTP Streams
+
+**Problem:** Mid-stream 403 (Forbidden) or 401 (Unauthorized) errors from YouTube's CDN would cause chunk reads to silently fail or throw exceptions that propagated as decoder errors, cutting off playback.
+
+**Fix:** `YoutubePersistentHttpStream` now:
+- Detects HTTP 403/401 error responses **inline** during chunk reads (including via cause-chain inspection for errors wrapped by Matroska/MPEG decoders).
+- Invokes a `UrlRefresher` callback to obtain a fresh stream URL and CDN fallback at the **exact byte offset** that failed.
+- Transparently retries the read with the new URL — no interruption to the audio pipeline.
+
+**Affected file:** [`YoutubePersistentHttpStream.java`](common/src/main/java/dev/lavalink/youtube/track/YoutubePersistentHttpStream.java)
+
+---
+
+### 3. Direct Stream Prioritization over SABR
+
+**Problem:** YouTube's SABR (Server-Adaptive Bitrate) streaming protocol reported incorrect/short durations and caused early stream termination around the 50-second mark, leading to abrupt track cutoffs even on healthy connections.
+
+**Fix applied in three places:**
+
+- **`TrackFormats.java`** — `isBetterFormat()` now strongly prefers non-SABR (direct progressive) formats when both are available, preventing accidental SABR selection.
+- **`StreamingNonMusicClient.java`** — `preferSabrPlayback()` returns `false` by default for all streaming non-music clients.
+- **`Tv.java`** — `preferSabrPlayback()` returns `false` to disable SABR on the `TV` client specifically.
+
+**Affected files:**
+- [`TrackFormats.java`](common/src/main/java/dev/lavalink/youtube/track/format/TrackFormats.java)
+- [`StreamingNonMusicClient.java`](common/src/main/java/dev/lavalink/youtube/clients/skeleton/StreamingNonMusicClient.java)
+- [`Tv.java`](common/src/main/java/dev/lavalink/youtube/clients/Tv.java)
+
+---
+
+### 4. SABR Stream Stability Fixes
+
+**Problem:** `SabrStream` reported incorrect player time and had premature finish conditions that caused the streaming session to end before the audio was fully delivered.
+
+**Fix:** Corrected duration calculation logic and player time reporting inside `SabrStream` to accurately reflect remaining content, preventing premature stream termination.
+
+**Affected file:** [`SabrStream.java`](common/src/main/java/dev/lavalink/youtube/sabr/SabrStream.java)
+
+### 5. Smart Multi-Client Fallback & "All Clients Failed" Fix
+
+**Problem:** When a stream URL expired or a CDN returned a permanent 403 error mid-playback, the player threw an `AllClientsFailedException` (فشل جميع المشغلات), stopping the track entirely — even though other healthy clients were available.
+
+**Fix:** A three-tier **URL Refresh** strategy (`UrlRefresher`) was added inside `YoutubeAudioTrack`, applied automatically whenever a chunk read fails:
+
+| Tier | Strategy | Description |
+|------|----------|-------------|
+| **1** | CDN Fallback | Switches to an alternative CDN host using the `mn` parameter already embedded in the signed URL — instant, zero-cost |
+| **2** | Re-fetch from Same Client | Calls `client.loadFormats(...)` again to get a brand new signed URL at the same itag, then resumes from the failed byte offset |
+| **3** | Try All Other Clients | Iterates over all other registered and healthy playback clients in order, using the first one that successfully returns a matching format |
+
+Additionally, the outer **retry loop** (`MAX_RESUME_ATTEMPTS = 5`) in `process()` ensures that if playback was already underway (i.e. frames were played), the system will retry with the healthiest client from the beginning of the client list — with an exponential back-off (`150ms × attempt`) — instead of immediately throwing `AllClientsFailedException`.
+
+`AllClientsFailedException` is only thrown if **no audio frames were ever played** and all clients failed during initial load, which is the correct behavior for genuinely unavailable videos.
+
+**Affected file:** [`YoutubeAudioTrack.java`](common/src/main/java/dev/lavalink/youtube/track/YoutubeAudioTrack.java)
+
+---
+
+
+
+| File | Change |
+|------|--------|
+| `YoutubeAudioTrack.java` | Seamless position-aware resumption + 3-tier URL refresh + retry loop (fixes `AllClientsFailedException`) |
+| `YoutubePersistentHttpStream.java` | Self-healing URL refresh on 403/401 mid-stream errors |
+| `TrackFormats.java` | Prefers direct progressive streams over SABR |
+| `StreamingNonMusicClient.java` | Disables SABR by default |
+| `Tv.java` | Disables SABR for the TV client |
+| `SabrStream.java` | Fixes premature finish and incorrect duration reporting |
+
+---
 
 ## Migration from Lavaplayer's built-in YouTube source
 
