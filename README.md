@@ -108,30 +108,25 @@ This module serves as the plugin for use with [Lavalink](https://github.com/lava
 To use this plugin with Lavalink, you must declare the dependency.
 
 <details>
-<summary>Using with Lavalink v3:</summary>
+<summary>Using with Lavalink v3 / v4 (JitPack):</summary>
 
 ```yaml
 lavalink:
   plugins:
-    # Replace VERSION with the current version as shown by the Releases tab or a long commit hash for snapshots.
-    - dependency: "dev.lavalink.youtube:youtube-plugin:VERSION"
-      repository: "https://maven.lavalink.dev/releases" # use https://maven.lavalink.dev/snapshots if you want to use a snapshot version.
+    - dependency: "com.github.av-ahmed007p.youtube-source-fixes-:youtube-plugin:v1.0.0"
+      repository: "https://jitpack.io"
 ```
 
 </details>
 
 <details>
-<summary>Using with Lavalink v4:</summary>
+<summary>Direct Download (Manual / Pterodactyl):</summary>
 
-```yaml
-lavalink:
-  plugins:
-    # Replace VERSION with the current version as shown by the Releases tab or a long commit hash for snapshots.
-    - dependency: "dev.lavalink.youtube:youtube-plugin:VERSION"
-      snapshot: false # Set to true if you want to use a snapshot version.
-```
+Download the compiled JAR from [GitHub Releases](https://github.com/av-ahmed007p/youtube-source-fixes-/releases/latest) and place it in the `plugins/` directory:
+- Direct link: `https://github.com/av-ahmed007p/youtube-source-fixes-/releases/latest/download/youtube-plugin.jar`
 
 </details>
+
 
 Configuring the plugin:
 > [!IMPORTANT]
